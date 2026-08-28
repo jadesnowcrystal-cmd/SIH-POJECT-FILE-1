@@ -138,6 +138,32 @@ last_names = [
     "Nair", "Iyer", "Joshi", "Deshmukh", "Choudhury", "Das", "Sen", "Bose",
     "Chatterjee", "Mukherjee", "Singh", "Kumar"
 ]
+male_planned_first_names = [
+    "Mogambo",
+    "Shakaal",
+    "Kancha",
+    "Gabbar",
+    "Don",
+    "Teja",
+    "Crime Master"
+]
+female_planned_first_names = [
+    "Komolika",
+    "Simran", # Wait, she's nice... let's use:
+    "Madame",
+    "Bindoo",
+    "Kaminey"
+]
+last_planned_names = [
+    "The Don",
+    "Dang",
+    "Cheena",
+    "Singh",
+    "Gogo",
+    "Pathan",
+    "Sinha",
+    "Bihari"
+]
 
 Occupation_Unplaned=["Software Engineer",
     "Data Analyst",
@@ -234,5 +260,107 @@ Informant = generate_person()
 print("Informant Details")
 
 print(f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
-print("-" * 42)
+print("-" * 208)
 print(f"{Informant['Name']:<21} | { Informant['Age']:<5} | {Informant['Gender']:<6} | { Informant['Fathers name']:<21} | {Informant['Suppose name']:<21} | { Informant['Occupation']:<21} | {Informant['Phone number']:<12} | { Informant['Address']:<19} | { Informant['Aadhaar Card']:<15}")
+
+Witness = generate_person()
+print("Witness Details")
+
+print(f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
+print("-" * 208)
+print(f"{Witness['Name']:<21} | { Witness['Age']:<5} | {Witness['Gender']:<6} | { Witness['Fathers name']:<21} | {Witness['Suppose name']:<21} | { Witness['Occupation']:<21} | {Witness['Phone number']:<12} | {Witness ['Address']:<19} | { Witness['Aadhaar Card']:<15}")
+print("-" * 208)
+print(f"{'Date of Presence':<21} | {'Time of Presence':<21} | {'Place of Presence':<21} ")
+print("-" * 65)
+print(f"{occurrence_date_str :<15} | {occurrence_time_str :<25} | {Place_of_Occurrence :<25}")
+print("-" * 208)
+Victim = generate_person()
+
+print("Victim Details")
+print(f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
+print("-" * 208)
+print(f"{Victim['Name']:<21} | {Victim['Age']:<5} | {Victim['Gender']:<6} | { Victim['Fathers name']:<21} | {Victim['Suppose name']:<21} | { Victim['Occupation']:<21} | {Victim['Phone number']:<12} | { Victim['Address']:<19} | {Victim['Aadhaar Card']:<15}")
+
+#Acuused details
+def accused_person():
+    gender = random.choice(['Male', 'Female'])
+
+    if gender == 'Male':
+        first_name = random.choice(male_planned_first_names)
+    else:
+        first_name = random.choice(female_planned_first_names)
+
+    last_name = random.choice(last_planned_names)
+    full_name = f"{first_name} {last_name}"
+    age = random.randint(22, 78)
+    father_name = f"{random.choice(male_first_names)} {last_name}"
+    if gender == 'Male':
+        suppose_name = f"{random.choice(female_first_names)} {random.choice(last_names)}"
+    else :
+        suppose_name = f"{random.choice(male_first_names)} {random.choice(last_names)}"
+    if selection_Connectivity == "Planed":
+        occupation = random.choice(Occupation_planed)
+    else:
+        occupation = random.choice(Occupation_Unplaned)
+    #Genration of Phone numbers
+    def generate_phone_number():
+        # Generate random area code (200-999)
+        area_code = random.randint(700, 999)
+
+        # Generate random 3-digit prefix (200-999)
+        prefix = random.randint(200, 999)
+
+        # Generate random 4-digit line number (0000-9999)
+        line_number = random.randint(0, 9999)
+
+        # Format as (XXX) XXX-XXXX
+        phone_number = f"({area_code}) {prefix}-{line_number:04d}"
+        return phone_number
+    if selection_Connectivity == "Planed":
+        address = random.choice(Coordinated_District)
+    else :
+        address = random.choice(District)
+    # Genrating fake Adhaar no
+    def generate_dummy_aadhaar():
+        # Generate 12 random digits
+        digits = [str(random.randint(0, 9)) for _ in range(12)]
+
+        # Optional: Aadhaar usually doesn't start with 0 or 1, let's make the first digit 2-9 for realism
+        digits[0] = str(random.randint(2, 9))
+
+        # Join into a single string
+        raw_number = "".join(digits)
+
+        # Format as XXXX XXXX XXXX
+        formatted_aadhaar = f"{raw_number[0:4]} {raw_number[4:8]} {raw_number[8:12]}"
+
+        return formatted_aadhaar
+
+    return {
+        "Name": full_name,
+        "Age": age,
+        "Gender": gender,
+        "Fathers name" : father_name,
+        "Suppose name" : suppose_name,
+        "Occupation" : occupation,
+        "Address" : address,
+        "Phone number" : generate_phone_number(),
+        "Aadhaar Card" : generate_dummy_aadhaar()
+
+    }
+print("Accused Details")
+Probability=[1, 0]
+if random.choice(Probability) == 1:
+    Acussed = accused_person()
+    print(
+        f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
+    print("-" * 208)
+    print(
+        f"{Acussed['Name']:<21} | {Acussed['Age']:<5} | {Acussed['Gender']:<6} | { Acussed['Fathers name']:<21} | {Acussed['Suppose name']:<21} | {Acussed['Occupation']:<21} | {Acussed['Phone number']:<12} |  | { Acussed['Address']:<19} | {Acussed['Aadhaar Card']:<15}")
+else :
+    print(
+        f"{'Full Name':<19} | {'Age':<19} | {'Gender':<19} | {'Fathers name':<19} | {'Suppose name':<19} | {'Occupation':<19} | {'Phone number':<19} | {'Address':<19} | {'Aadhaar Card':<19}")
+    print("-" * 208)
+    print(
+        f"{'Unknow':<19} | {'Unknow ':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19}")
+    print("-" * 208)
