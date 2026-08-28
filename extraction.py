@@ -14,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
 )
-logger = logging.getLogger("RAGExtractorEngine")
+logger = logging.getLogger("JanviNLPModule")
 
 # Optional spaCy loading with fallback configuration
 try:
@@ -67,10 +67,7 @@ class ExtractionEngineError(Exception):
 
 
 class SimpleVectorStore:
-    """
-    In-memory Vector Store simulating a RAG retrieval system.
-    Handles chunking, vectorization, indexing, and semantic similarity search.
-    """
+    """In-memory Vector Store handling chunking, vectorization, and indexing."""
     def __init__(self, chunk_size: int = 150, overlap: int = 1):
         self.chunk_size = chunk_size
         self.overlap = overlap
@@ -136,7 +133,6 @@ class SimpleVectorStore:
     def retrieve(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """Queries indexed document chunks based on cosine similarity."""
         if self.tfidf_matrix is None or len(self.chunks) == 0:
-            logger.warning("Retrieval attempted on an empty or unindexed VectorStore.")
             return []
 
         try:
@@ -159,7 +155,7 @@ class SimpleVectorStore:
 
 
 class EntityResolver:
-    """Handles entity normalization and deterministic MD5 unique ID assignment."""
+    """Handles entity normalization and deterministic unique ID assignment."""
     @staticmethod
     def generate_id(entity_type: str, normalized_value: str) -> str:
         raw_str = f"{entity_type.upper()}:{normalized_value.lower().strip()}"
@@ -168,7 +164,7 @@ class EntityResolver:
 
     @staticmethod
     def normalize_value(entity_type: str, raw_val: str) -> str:
-        clean_val = raw_val.strip()
+        clean_val = str(raw_val).strip()
         if entity_type == "PHONE":
             digits = re.sub(r"\D", "", clean_val)
             return f"+91{digits[-10:]}" if len(digits) >= 10 else clean_val
@@ -180,7 +176,7 @@ class EntityResolver:
 
 
 class RAGExtractorEngine:
-    """Primary pipeline class handling feature extraction and context retrieval."""
+    """Primary NLP & Network extraction engine connected to NEXUS database structure."""
     def __init__(self, chunk_size: int = 150):
         self.vector_store = SimpleVectorStore(chunk_size=chunk_size)
         self.resolver = EntityResolver()
@@ -188,7 +184,7 @@ class RAGExtractorEngine:
     def _extract_raw_entities(self, text: str) -> List[Dict[str, Any]]:
         raw_entities = []
 
-        # 1. Regex Entity Processing
+        # 1. Regex Entity Extraction
         for e_type, pattern in REGEX_PATTERNS.items():
             for match in re.finditer(pattern, text, re.IGNORECASE):
                 raw_entities.append({
@@ -214,7 +210,9 @@ class RAGExtractorEngine:
             e_type = entity["type"]
             raw_val = entity["value"]
             norm_val = self.resolver.normalize_value(e_type, raw_val)
-            e_id = self.resolver.generate_id(e_type, norm_val)
+            
+            # Preserve existing entity ID if available, otherwise generate deterministic ID
+            e_id = entity.get("id") or self.resolver.generate_id(e_type, norm_val)
 
             if e_id not in resolved:
                 resolved[e_id] = {
@@ -257,15 +255,36 @@ class RAGExtractorEngine:
 
         return relations
 
-    def _extract_keywords(self, text: str) -> List[str]:
-        text_lower = text.lower()
-        return [
-            kw for kw in DOMAIN_KEYWORDS 
-            if re.search(rf"\b{re.escape(kw)}\b", text_lower)
-        ]
+    def _compute_network_analytics(self, entities: List[Dict[str, Any]], relations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Calculates degree centrality and key network metrics (Janvi's task)."""
+        degree_count = {e["id"]: 0 for e in entities}
+        
+        for rel in relations:
+            src, tgt = rel["source"], rel["target"]
+            if src in degree_count:
+                degree_count[src] += 1
+            if tgt in degree_count:
+                degree_count[tgt] += 1
 
-    def process(self, document_text: str, case_id: str = "CASE-RAG-001") -> Dict[str, Any]:
-        """Runs the complete RAG + Extraction Pipeline on raw input text."""
+        total_nodes = len(entities)
+        centrality = {
+            k: round(v / (total_nodes - 1), 4) if total_nodes > 1 else 0
+            for k, v in degree_count.items()
+        }
+
+        # Find most central entity
+        sorted_centrality = sorted(centrality.items(), key=lambda x: x[1], reverse=True)
+        top_central_id = sorted_centrality[0][0] if sorted_centrality else None
+
+        return {
+            "node_count": total_nodes,
+            "edge_count": len(relations),
+            "degree_centrality": centrality,
+            "top_central_entity_id": top_central_id
+        }
+
+    def process(self, document_text: str, case_id: str = "CASE-RAG-001", structured_entities: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Runs the complete RAG + Extraction + Network Analytics Pipeline."""
         clean_doc = re.sub(r"\s+", " ", document_text).strip()
 
         indexed_chunks_count = self.vector_store.index_document(doc_id=case_id, text=clean_doc)
@@ -283,10 +302,16 @@ class RAGExtractorEngine:
             for res in results:
                 retrieved_contexts.append(res)
 
-        raw_entities = self._extract_raw_entities(clean_doc)
-        entities = self._resolve_entities(raw_entities)
+        # Extract entities from unstructured text
+        extracted_raw = self._extract_raw_entities(clean_doc)
+        
+        # Merge structured entities from Aditya's module if provided
+        if structured_entities:
+            extracted_raw.extend(structured_entities)
+
+        entities = self._resolve_entities(extracted_raw)
         relations = self._extract_relations(clean_doc, entities)
-        keywords = self._extract_keywords(clean_doc)
+        network_analytics = self._compute_network_analytics(entities, relations)
 
         return {
             "metadata": {
@@ -297,50 +322,65 @@ class RAGExtractorEngine:
                 "total_relations_found": len(relations),
                 "status": "SUCCESS"
             },
+            "network_analytics": network_analytics,
             "rag_retrieved_evidence": retrieved_contexts,
             "entities": entities,
-            "relations": relations,
-            "keywords": sorted(list(set(keywords)))
+            "relations": relations
         }
 
 
 def process_case_data(case_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Adapter routine to ingest synthetic dictionary outputs generated by 
-    fakedatagenration.py and translate them into full unstructured intelligence reports.
+    Adapter routine that ingests standard synthetic FIR structures generated by
+    Aditya's module and translates them into investigative network intelligence.
     """
-    victim = case_data.get("Victim") or {}
-    accused = case_data.get("Accused") or {}
-    witness = case_data.get("Witness") or {}
-    informant = case_data.get("Informant") or {}
+    case_id = case_data.get("case_id", f"CASE-{datetime.now().strftime('%M%S')}")
+    rep_details = case_data.get("report_details", {})
+    occ_details = case_data.get("occurrence_details", {})
+    entities_data = case_data.get("entities", {})
 
-    accused_name = accused.get('Name', 'Unknown Suspect')
-    accused_addr = accused.get('Address', 'Unknown Location')
-    accused_phone = accused.get('Phone number', 'N/A')
+    victim = entities_data.get("victim", {})
+    accused = entities_data.get("accused") if isinstance(entities_data.get("accused"), dict) else {}
+    witness = entities_data.get("witness", {})
+    informant = entities_data.get("informant", {})
 
     accused_str = (
-        f"The suspect involved was identified as {accused_name} living at {accused_addr} "
-        f"(Phone: {accused_phone})." if accused else "The suspect remains unknown."
+        f"The suspect involved was identified as {accused.get('name')} living at {accused.get('address')} "
+        f"(Phone: {accused.get('phone_number')})." if accused else "The suspect remains unknown."
     )
 
+    # Reconstruct readable narrative for RAG Vector Indexing
     narrative_report = f"""
-    On {case_data.get('Occurrence Date', 'N/A')} at {case_data.get('Occurrence Time', 'N/A')}, an incident of {case_data.get('Case Type', 'Crime')} occurred in {case_data.get('Place of Occurrence', 'Location')}, {case_data.get('District', 'Region')}.
-    The incident was formally reported on {case_data.get('Report Date', 'N/A')} at {case_data.get('Report Time', 'N/A')}.
-    The victim involved is {victim.get('Name', 'Unknown')} residing at {victim.get('Address', 'Unknown')} (Phone: {victim.get('Phone number', 'N/A')}).
-    Informant {informant.get('Name', 'Unknown')} reported the matter to local authorities. 
-    Witness {witness.get('Name', 'Unknown')} was present near the scene of occurrence.
+    On {occ_details.get('date', 'N/A')} at {occ_details.get('time', 'N/A')}, an incident of {case_data.get('case_type', 'Crime')} occurred in {occ_details.get('place', 'Location')}, {case_data.get('district', 'Region')}.
+    The incident was formally reported on {rep_details.get('date', 'N/A')} at {rep_details.get('time', 'N/A')}.
+    The victim involved is {victim.get('name', 'Unknown')} residing at {victim.get('address', 'Unknown')} (Phone: {victim.get('phone_number', 'N/A')}).
+    Informant {informant.get('name', 'Unknown')} reported the matter to local authorities. 
+    Witness {witness.get('name', 'Unknown')} was present near the scene of occurrence.
     {accused_str}
-    Initial investigation classified this as a {case_data.get('Connectivity', 'General')} event.
+    Initial investigation classified this as a {case_data.get('connectivity', 'General')} event.
     """
 
+    # Format pre-structured person entities from Aditya's output
+    structured_person_entities = []
+    for role, person in entities_data.items():
+        if isinstance(person, dict) and person.get("name"):
+            structured_person_entities.append({
+                "id": person.get("person_id"),
+                "type": "PERSON",
+                "value": person.get("name")
+            })
+            if person.get("phone_number"):
+                structured_person_entities.append({
+                    "type": "PHONE",
+                    "value": person.get("phone_number")
+                })
+
     engine = RAGExtractorEngine()
-    district_code = case_data.get('District', 'SYS').upper().replace(" ", "_")
-    case_id = f"CASE-{district_code}-{datetime.now().strftime('%M%S')}"
-    return engine.process(narrative_report, case_id=case_id)
+    return engine.process(narrative_report, case_id=case_id, structured_entities=structured_person_entities)
 
 
 def batch_process_cases(case_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Batch processes multiple case records generated by synthetic modules."""
+    """Batch processes multiple FIR records."""
     results = []
     logger.info(f"Starting batch extraction on {len(case_list)} case items...")
     for index, case_item in enumerate(case_list):
@@ -349,20 +389,30 @@ def batch_process_cases(case_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             results.append(processed)
         except Exception as err:
             logger.error(f"Failed to process case at index {index}: {err}")
-    logger.info(f"Batch processing complete. Successfully extracted {len(results)} records.")
+    logger.info(f"Batch processing complete. Successfully processed {len(results)} records.")
     return results
 
 
+# ==========================================
+# EXECUTION & INTEGRATION TEST
+# ==========================================
 if __name__ == "__main__":
-    sample_case_report = """
-    On 14 August 2026, Rahul Sharma met Sameer Verma near Vashi Station in Mumbai. 
-    Rahul called Sameer on 9876543210 regarding a pending transaction. 
-    Later that evening, Sameer transferred Rs. 80,000 to Rahul. 
-    A black SUV with vehicle number MH-04-AB-1234 was spotted near the transfer site during the extortion attempt. 
-    The suspect fled toward Pune after receiving the cash.
-    """
+    # Integration test with Aditya's generator format
+    sample_fir = {
+        "case_id": "FIR-2026-0001",
+        "district": "Thane",
+        "case_type": "Robbery",
+        "connectivity": "Planed",
+        "report_details": {"date": "25-08-26", "time": "14:30"},
+        "occurrence_details": {"date": "20-08-26", "time": "21:00", "place": "Airoli"},
+        "entities": {
+            "informant": {"person_id": "PER-1001", "name": "Rahul Sharma", "phone_number": "(987) 654-3210"},
+            "victim": {"person_id": "PER-1002", "name": "Amit Patel", "address": "Thane", "phone_number": "(912) 345-6789"},
+            "witness": {"person_id": "PER-1003", "name": "Rohan Verma"},
+            "accused": {"person_id": "PER-1004", "name": "Mogambo Singh", "address": "Airoli", "phone_number": "(999) 888-7777"}
+        }
+    }
 
-    logger.info("Running standalone extraction execution test...")
-    rag_engine = RAGExtractorEngine()
-    output_payload = rag_engine.process(sample_case_report, case_id="CASE-2026-INV-99")
-    print(json.dumps(output_payload, indent=2))
+    logger.info("Running integrated NLP and network analytics test...")
+    output = process_case_data(sample_fir)
+    print(json.dumps(output, indent=2))
