@@ -1,15 +1,3 @@
-"""
-Module 3: Network Analytics Engine
-Single-File Implementation
-
-Objectives:
-1. Ingest structured entity and triplet graph JSON payloads.
-2. Calculate node centrality (Degree, Betweenness, Closeness, PageRank).
-3. Detect critical bridges and inter-cell liaison links.
-4. Partition network into distinct sub-gang communities using Greedy Modularity.
-5. Export interactive PyVis visual graphs and structured hand-off JSON payloads.
-"""
-
 import os
 import json
 import pandas as pd
@@ -26,21 +14,22 @@ MEDIUM_RISK_PERCENTILE = 0.50
 
 # Visual Styling Rules for PyVis Graphs
 TYPE_COLOR_MAP = {
-    "PERSON": "#E74C3C",        # Red
-    "PHONE": "#3498DB",         # Blue
-    "VEHICLE": "#F1C40F",       # Yellow
-    "LOCATION": "#2ECC71",      # Green
-    "ORGANIZATION": "#9B59B6",  # Purple
-    "MONEY": "#E67E22"          # Orange
+    "PERSON": "#E74C3C",         # Red
+    "PHONE": "#3498DB",          # Blue
+    "VEHICLE": "#F1C40F",        # Yellow
+    "LOCATION": "#2ECC71",       # Green
+    "ORGANIZATION": "#9B59B6",   # Purple
+    "MONEY": "#E67E22",          # Orange
+    "ACCOUNT": "#1ABC9C"         # Teal
 }
 
 DEFAULT_NODE_COLOR = "#95A5A6"
-BRIDGE_EDGE_COLOR = "#FF0000"
+BRIDGE_EDGE_COLOR = "#E74C3C"
 DEFAULT_EDGE_COLOR = "#BDC3C7"
 
 
 # =====================================================================
-# 2. SCHEMA BUILDERS
+# 2. INTER-MODULE SCHEMA BUILDERS
 # =====================================================================
 def build_node_metrics(
     node_id: str, 
@@ -52,7 +41,10 @@ def build_node_metrics(
     risk_score: str, 
     community_id: int
 ) -> Dict[str, Any]:
-    """Formats calculated node metrics into clean dictionaries for UI hand-off."""
+    """
+    Formats calculated node metrics into clean dictionaries for Streamlit UI 
+    display and hand-off to Module 4 (Timeline) & Neo4j sync.
+    """
     return {
         "id": node_id,
         "type": node_type,
@@ -68,7 +60,7 @@ def build_node_metrics(
 
 
 def build_bridge_payload(source: str, target: str, bridge_type: str = "Inter-Cell Liaison") -> Dict[str, Any]:
-    """Formats bridge connection records."""
+    """Formats bridge connection records for vulnerability analysis."""
     return {
         "source": source,
         "target": target,
@@ -77,17 +69,17 @@ def build_bridge_payload(source: str, target: str, bridge_type: str = "Inter-Cel
 
 
 # =====================================================================
-# 3. GRAPH BUILDER MODULE
+# 3. GRAPH BUILDER MODULE (MODULE 2 INTEGRATION)
 # =====================================================================
 class GraphBuilder:
-    """Ingests extraction module JSON outputs and constructs NetworkX graph objects."""
+    """Ingests NLP/RAG Module JSON outputs and constructs NetworkX graph objects."""
     
     @staticmethod
     def build_graph(extraction_data: Dict[str, Any]) -> nx.Graph:
         """Converts entity arrays and relation triplets into an undirected NetworkX Graph."""
         G = nx.Graph()
 
-        # Add Nodes with attributes
+        # 1. Add Nodes with extracted entity attributes
         entities = extraction_data.get("entities", [])
         for ent in entities:
             G.add_node(
@@ -97,7 +89,7 @@ class GraphBuilder:
                 normalized=ent.get("normalized_value", ent.get("value", ""))
             )
 
-        # Add Edges with relation context
+        # 2. Add Edges with relation context
         relations = extraction_data.get("relations", [])
         for rel in relations:
             src = rel["source"]
@@ -109,7 +101,7 @@ class GraphBuilder:
             if not G.has_node(tgt):
                 G.add_node(tgt, type="UNKNOWN", label=tgt)
 
-            # Weight increments for repeated connections
+            # Weight increments for repeated connections across multiple FIRs/CDRs
             if G.has_edge(src, tgt):
                 G[src][tgt]["weight"] += 1
                 G[src][tgt]["actions"].append(rel.get("action", "ASSOCIATED"))
@@ -164,7 +156,7 @@ class CentralityAnalyzer:
 
         df = pd.DataFrame(data)
         
-        # Calculate composite importance score
+        # Calculate composite importance score (Weighted multi-metric scoring)
         max_degree = max(df["degree"].max(), 1)
         df["composite_score"] = (
             (df["degree"] / max_degree) * 0.3 +
@@ -196,7 +188,7 @@ class CentralityAnalyzer:
 # 5. BRIDGE & BOTTLENECK DETECTOR MODULE
 # =====================================================================
 class BridgeDetector:
-    """Detects critical structural bridges and bottleneck nodes between network sub-clusters."""
+    """Detects critical structural bridges and bottleneck nodes between sub-gang clusters."""
     
     def __init__(self, graph: nx.Graph):
         self.G = graph
@@ -280,13 +272,13 @@ class GraphVisualizer:
         self, 
         bridges: List[Dict[str, Any]], 
         community_map: Dict[str, int], 
-        output_filepath: str = "network_map.html"
+        output_filepath: str = "output/network_map.html"
     ) -> str:
         """Renders the graph to an interactive HTML canvas file using PyVis."""
         if len(self.G) == 0:
             return ""
 
-        net = Network(height="750px", width="100%", bgcolor="#222222", font_color="white")
+        net = Network(height="650px", width="100%", bgcolor="#111827", font_color="white")
         net.barcode = False
 
         # Identify bridge pairs for fast lookup styling
@@ -307,7 +299,7 @@ class GraphVisualizer:
                 label=f"{label} ({n_type})", 
                 color=color, 
                 title=title,
-                size=20
+                size=22
             )
 
         # Add Edges with Bridge Highlighting
@@ -325,7 +317,7 @@ class GraphVisualizer:
                 width=width
             )
 
-        # Generate layout settings
+        # Generate physics layout settings
         net.force_atlas_2based()
         
         output_dir = os.path.dirname(output_filepath)
@@ -340,14 +332,14 @@ class GraphVisualizer:
 # 8. NETWORK ANALYTICS ENGINE (MAIN ORCHESTRATOR)
 # =====================================================================
 class NetworkAnalyticsEngine:
-    """Orchestrator class tying all execution components together."""
+    """Orchestrator class tying all processing modules and session states together."""
     
     def __init__(self):
         self.builder = GraphBuilder()
 
     def analyze(self, extraction_payload: Dict[str, Any], output_html_path: str = "output/network.html") -> Dict[str, Any]:
         """Executes full graph processing pipeline on input entity data."""
-        # Step 1: Construct Graph Instance
+        # Step 1: Construct Graph Instance from Module 2 NLP Extraction
         G = self.builder.build_graph(extraction_payload)
 
         if len(G) == 0:
@@ -396,7 +388,7 @@ class NetworkAnalyticsEngine:
 
         # Step 7: Summary Metadata
         summary = {
-            "case_id": extraction_payload.get("metadata", {}).get("case_id", "UNKNOWN_CASE"),
+            "case_id": extraction_payload.get("metadata", {}).get("case_id", "CASE-2026-MUMBAI-01"),
             "processed_at": datetime.now().isoformat(),
             "total_nodes": G.number_of_nodes(),
             "total_edges": G.number_of_edges(),
@@ -415,47 +407,47 @@ class NetworkAnalyticsEngine:
 
 
 # =====================================================================
-# 9. STANDALONE EXECUTION & TEST DRIVE
+# 9. INTEGRATION CONTRACT & STANDALONE EXECUTION
 # =====================================================================
 if __name__ == "__main__":
-    # Mock input payload matching Module 1 / Module 2 extraction specifications
-    sample_extraction_payload = {
+    # Test Payload: Simulates structured JSON passed directly from Janvi's NLP Engine
+    sample_nlp_payload = {
         "metadata": {"case_id": "CASE-2026-MUMBAI-89"},
         "entities": [
-            {"id": "person_01", "type": "PERSON", "value": "Rahul Sharma"},
-            {"id": "person_02", "type": "PERSON", "value": "Sameer Verma"},
-            {"id": "person_03", "type": "PERSON", "value": "Amit Patel"},
-            {"id": "person_04", "type": "PERSON", "value": "Vijay Shah"},
-            {"id": "phone_01", "type": "PHONE", "value": "+919876543210"},
-            {"id": "vehicle_01", "type": "VEHICLE", "value": "MH04AB1234"},
-            {"id": "location_01", "type": "LOCATION", "value": "Vashi Station"}
+            {"id": "Rahul", "type": "PERSON", "value": "Rahul Sharma"},
+            {"id": "Sameer", "type": "PERSON", "value": "Sameer Verma"},
+            {"id": "Amit", "type": "PERSON", "value": "Amit Patel"},
+            {"id": "Vijay", "type": "PERSON", "value": "Vijay Shah"},
+            {"id": "Phone_01", "type": "PHONE", "value": "+919876543210"},
+            {"id": "MH04AB1234", "type": "VEHICLE", "value": "MH04AB1234"},
+            {"id": "Station_Road", "type": "LOCATION", "value": "Station Road"}
         ],
         "relations": [
-            {"source": "person_01", "target": "person_02", "action": "MEETING", "context": "Rahul met Sameer"},
-            {"source": "person_01", "target": "phone_01", "action": "USED", "context": "Rahul called using phone"},
-            {"source": "person_02", "target": "phone_01", "action": "RECEIVED", "context": "Sameer received call"},
-            {"source": "person_02", "target": "person_03", "action": "TRANSFER", "context": "Sameer transferred money to Amit"},
-            {"source": "person_03", "target": "person_04", "action": "MEETING", "context": "Amit met Vijay"},
-            {"source": "person_02", "target": "vehicle_01", "action": "DROVE", "context": "Sameer used vehicle"}
+            {"source": "Rahul", "target": "Sameer", "action": "MEETING", "context": "Rahul met Sameer"},
+            {"source": "Rahul", "target": "Phone_01", "action": "COMMUNICATION", "context": "Rahul made call"},
+            {"source": "Sameer", "target": "Phone_01", "action": "COMMUNICATION", "context": "Sameer received call"},
+            {"source": "Sameer", "target": "Amit", "action": "TRANSACTION", "context": "Sameer transferred funds"},
+            {"source": "Amit", "target": "Vijay", "action": "MEETING", "context": "Amit met Vijay"},
+            {"source": "Sameer", "target": "MH04AB1234", "action": "ASSOCIATED", "context": "Vehicle seen near site"}
         ]
     }
 
     print("==================================================================")
-    print("                MODULE 3: NETWORK ANALYTICS ENGINE                ")
+    print("           MODULE 3: NETWORK ANALYTICS ENGINE RUNTIME            ")
     print("==================================================================")
 
     # Initialize Engine and process graph
     engine = NetworkAnalyticsEngine()
-    result = engine.analyze(sample_extraction_payload, output_html_path="output/network_map.html")
+    result = engine.analyze(sample_nlp_payload, output_html_path="output/network_map.html")
 
     # Display Engine Summary Output
-    print("\n[1] ENGINE SUMMARY:")
+    print("\n[1] ENGINE SUMMARY METADATA:")
     print(json.dumps(result["summary"], indent=2))
 
-    print("\n[2] TOP SUSPECTS RANKING (CENTRALITY & RISK):")
+    print("\n[2] TOP SUSPECTS RANKING (HAND-OFF TO NEO4J & TIMELINE):")
     print(json.dumps(result["top_suspects"][:3], indent=2))
 
-    print("\n[3] CRITICAL BRIDGES & BOTTLENECKS:")
+    print("\n[3] CRITICAL BRIDGES & BOTTLENECKS DETECTED:")
     print(json.dumps(result["critical_bridges"], indent=2))
 
     print("\n[4] COMMUNITIES / SUB-CELLS DETECTED:")
