@@ -1,366 +1,212 @@
-import random
+iimport random
+import json
 from datetime import datetime, timedelta
 
-District = [ "Thane","Panvel","Belapur","Seawoods","Khandeshwar","Mansarowar","Kharghar","Airoli","Kalyan","Nerul","Digagav"]
-print(random.choice(District))
-Date_of_report = []
-range_1_start = datetime.strptime("20-08-26", "%d-%m-%y")
-range_1_end = datetime.strptime("30-08-26", "%d-%m-%y")
 
-range_2_start = datetime.strptime("01-09-26", "%d-%m-%y")
-range_2_end = datetime.strptime("22-09-26", "%d-%m-%y")
+DISTRICTS = [
+    "Thane", "Panvel", "Belapur", "Seawoods", "Khandeshwar", 
+    "Mansarowar", "Kharghar", "Airoli", "Kalyan", "Nerul", "Digagav"
+]
 
-# 1. Generate (August 20 to August 30)
-current_date = range_1_start
-while current_date <= range_1_end:
-    Date_of_report.append(current_date.strftime("%d-%m-%y"))
-    current_date += timedelta(days=1)
+COORDINATED_DISTRICTS = ["Airoli", "Kalyan", "Nerul", "Digagav"]
 
-# 2. Generate  (September 1 to September 22)
-current_date = range_2_start
-while current_date <= range_2_end:
-    Date_of_report.append(current_date.strftime("%d-%m-%y"))
-    current_date += timedelta(days=1)
+CASE_TYPES = ["Murder", "Attempt to Murder", "Kidnapping", "Robbery"]
+CONNECTIVITY_TYPES = ["Planed", "Unplaned"]
 
-report_date_str = random.choice(Date_of_report)
-print(report_date_str)
-
-#Genrating Time
-Time_of_report = []
-start = datetime.strptime("10:00", "%H:%M")
-end = datetime.strptime("23:59", "%H:%M")
-step = timedelta(minutes=30)  # Change interval here as needed
-
-current = start
-while current <= end:
-  Time_of_report.append(current.strftime("%H:%M"))
-  current += step
-
-report_time_str = random.choice(Time_of_report)
-print(report_time_str)
-
-#Type of Case and Planned or Unplaned
-Case_type = ["Murder","Attempt to Murder","Kidnapping","Robbery"]
-selection_casetype= random.choice(Case_type)
-
-Connectivity=["Planed","Unplaned"]
-selection_Connectivity= random.choice(Connectivity)
-#Date of Occurrence
-Date_of_Occurrence = []
-
-# --- n ranges per case type & planned/unplanned status ---
-# (min_n, max_n) — occurrence = report_date - n days
+# Occurrence date offset ranges relative to Report Date
 N_RANGES = {
     "Murder": {"Unplaned": (4, 7), "Planed": (7, 9)},
     "Attempt to Murder": {"Unplaned": (1, 1), "Planed": (3, 5)},
     "Kidnapping": {"Unplaned": (1, 1), "Planed": (1, 2)},
-    "Robbery": {"Unplaned": (1, 1), "Planed": (1, 2)},  # treated as "theft"
+    "Robbery": {"Unplaned": (1, 1), "Planed": (1, 2)},
 }
 
-valid_report_dates = set(Date_of_report)  # fast lookup; already excludes the Aug31 gap
-report_date_dt = datetime.strptime(report_date_str, "%d-%m-%y")
-
-min_n, max_n = N_RANGES[selection_casetype][selection_Connectivity]
-
-occurrence_date_str = None
-chosen_n = None
-
-# Try every n from max_n down to min_n, pick the first that lands on a valid date
-for n in range(max_n, min_n - 1, -1):
-    candidate = report_date_dt - timedelta(days=n)
-    candidate_str = candidate.strftime("%d-%m-%y")
-    if candidate_str in valid_report_dates:
-        occurrence_date_str = candidate_str
-        chosen_n = n
-        break
-
-# Fallback: nothing in the n-range was valid (report date too close to range_1_start) -> clamp
-if occurrence_date_str is None:
-    occurrence_date_str = range_1_start.strftime("%d-%m-%y")
-    chosen_n = (report_date_dt - range_1_start).days
-
-Date_of_Occurrence.append(occurrence_date_str)
-
-print(f"Case Type: {selection_casetype}")
-print(f"Connectivity: {selection_Connectivity}")
-#print(f"n used: {chosen_n}")#i Used for checking the code
-print(f"Date of Report: {report_date_str}") #Just for checking
-print(f"Date of Occurrence: {occurrence_date_str}")
-
-Time_of_Occurrence = []
-
-if selection_Connectivity == "Planed":
-  start_too = datetime.strptime("20:00", "%H:%M")
-  end_too = datetime.strptime("23:00", "%H:%M")
-else:
-  start_too = datetime.strptime("10:00", "%H:%M")
-  end_too = datetime.strptime("23:59", "%H:%M")
-
-step_too = timedelta(minutes=30)
-current_too = start_too
-
-while current_too <= end_too:
-  Time_of_Occurrence.append(current_too.strftime("%H:%M"))
-  current_too += step_too
-
-occurrence_time_str = random.choice(Time_of_Occurrence)
-
-#print(Time_of_Occurrence)
-print(f"Occurrence Time: {occurrence_time_str}")
-
-#Place of Occurrence
-Place_of_Occurrence = []
-if selection_Connectivity == "Planed":
-    Coordinated_District=["Airoli","Kalyan","Nerul","Digagav"]
-    Place_of_Occurrence = random.choice(Coordinated_District)
-else :
-    Place_of_Occurrence = random.choice(District)
-print(f"Place_of_Occurrence: {Place_of_Occurrence}")
-
-#Personal information of Particle involved
-import random
-
-# Lists of common Indian first names (split by gender) and last names
-male_first_names = [
+MALE_FIRST_NAMES = [
     "Aarav", "Vivaan", "Aditya", "Vihaan", "Arjun", "Sai", "Reyansh", "Ayaan",
     "Krishna", "Ishaan", "Dhruv", "Kabir", "Rohan", "Rahul", "Amit", "Vikram",
     "Siddharth", "Manish", "Karan", "Nikhil"
 ]
 
-female_first_names = [
+FEMALE_FIRST_NAMES = [
     "Diya", "Saanvi", "Ananya", "Aadhya", "Pari", "Anika", "Navya", "Angel",
     "Riya", "Pooja", "Neha", "Priya", "Anjali", "Sneha", "Kavita", "Meera",
     "Swati", "Divya", "Kiran", "Tanvi"
 ]
 
-last_names = [
+LAST_NAMES = [
     "Sharma", "Verma", "Gupta", "Malhotra", "Bansal", "Mehta", "Patel", "Reddy",
     "Nair", "Iyer", "Joshi", "Deshmukh", "Choudhury", "Das", "Sen", "Bose",
     "Chatterjee", "Mukherjee", "Singh", "Kumar"
 ]
-male_planned_first_names = [
-    "Mogambo",
-    "Shakaal",
-    "Kancha",
-    "Gabbar",
-    "Don",
-    "Teja",
-    "Crime Master"
-]
-female_planned_first_names = [
-    "Komolika",
-    "Simran", # Wait, she's nice... let's use:
-    "Madame",
-    "Bindoo",
-    "Kaminey"
-]
-last_planned_names = [
-    "The Don",
-    "Dang",
-    "Cheena",
-    "Singh",
-    "Gogo",
-    "Pathan",
-    "Sinha",
-    "Bihari"
+
+MALE_PLANNED_NAMES = ["Mogambo", "Shakaal", "Kancha", "Gabbar", "Don", "Teja", "Crime Master"]
+FEMALE_PLANNED_NAMES = ["Komolika", "Madame", "Bindoo", "Kaminey"]
+LAST_PLANNED_NAMES = ["The Don", "Dang", "Cheena", "Singh", "Gogo", "Pathan", "Sinha", "Bihari"]
+
+OCCUPATIONS_UNPLANNED = [
+    "Software Engineer", "Data Analyst", "Doctor", "Teacher", "Accountant",
+    "Civil Engineer", "Graphic Designer", "Marketing Manager", "Nurse", "Banker",
+    "Lawyer", "Architect", "Pharmacist", "Chef", "Mechanical Engineer",
+    "Content Writer", "HR Specialist", "Sales Executive", "Research Scientist", "Project Manager"
 ]
 
-Occupation_Unplaned=["Software Engineer",
-    "Data Analyst",
-    "Doctor",
-    "Teacher",
-    "Accountant",
-    "Civil Engineer",
-    "Graphic Designer",
-    "Marketing Manager",
-    "Nurse",
-    "Banker",
-    "Lawyer",
-    "Architect",
-    "Pharmacist",
-    "Chef",
-    "Mechanical Engineer",
-    "Content Writer",
-    "HR Specialist",
-    "Sales Executive",
-    "Research Scientist",
-    "Project Manager"]
+OCCUPATIONS_PLANNED = [
+    "Section Officer", "Tax Assistant", "Junior Engineer", "Postal Inspector",
+    "Revenue Inspector", "Lower Division Clerk", "Panchayat Secretary"
+]
 
-Occupation_planed=["Section Officer" ,"Tax Assistant","Junior Engineer","Postal Inspector","Revenue Inspector","Lower Division"," Clerk", 'Panchayat Secretary']
-def generate_person():
+# ==========================================
+# HELPER GENERATORS
+# ==========================================
+def generate_phone_number():
+    area_code = random.randint(700, 999)
+    prefix = random.randint(200, 999)
+    line_number = random.randint(0, 9999)
+    return f"({area_code}) {prefix}-{line_number:04d}"
+
+def generate_dummy_aadhaar():
+    digits = [str(random.randint(0, 9)) for _ in range(12)]
+    digits[0] = str(random.randint(2, 9))
+    raw_number = "".join(digits)
+    return f"{raw_number[0:4]} {raw_number[4:8]} {raw_number[8:12]}"
+
+def generate_person(role="general", connectivity="Unplaned"):
+    """Generates standardized person demographic profile."""
     gender = random.choice(['Male', 'Female'])
-
-    if gender == 'Male':
-        first_name = random.choice(male_first_names)
+    
+    if role == "accused":
+        first_name = random.choice(MALE_PLANNED_NAMES if gender == 'Male' else FEMALE_PLANNED_NAMES)
+        last_name = random.choice(LAST_PLANNED_NAMES)
     else:
-        first_name = random.choice(female_first_names)
+        first_name = random.choice(MALE_FIRST_NAMES if gender == 'Male' else FEMALE_FIRST_NAMES)
+        last_name = random.choice(LAST_NAMES)
 
-    last_name = random.choice(last_names)
     full_name = f"{first_name} {last_name}"
     age = random.randint(22, 78)
-    father_name = f"{random.choice(male_first_names)} {last_name}"
-    if gender == 'Male':
-        suppose_name = f"{random.choice(female_first_names)} {random.choice(last_names)}"
-    else :
-        suppose_name = f"{random.choice(male_first_names)} {random.choice(last_names)}"
-    if selection_Connectivity == "Planed":
-        occupation = random.choice(Occupation_planed)
-    else:
-        occupation = random.choice(Occupation_Unplaned)
-    #Genration of Phone numbers
-    def generate_phone_number():
-        # Generate random area code (200-999)
-        area_code = random.randint(700, 999)
-
-        # Generate random 3-digit prefix (200-999)
-        prefix = random.randint(200, 999)
-
-        # Generate random 4-digit line number (0000-9999)
-        line_number = random.randint(0, 9999)
-
-        # Format as (XXX) XXX-XXXX
-        phone_number = f"({area_code}) {prefix}-{line_number:04d}"
-        return phone_number
-    if selection_Connectivity == "Planed":
-        address = random.choice(Coordinated_District)
-    else :
-        address = random.choice(District)
-    # Genrating fake Adhaar no
-    def generate_dummy_aadhaar():
-        # Generate 12 random digits
-        digits = [str(random.randint(0, 9)) for _ in range(12)]
-
-        # Optional: Aadhaar usually doesn't start with 0 or 1, let's make the first digit 2-9 for realism
-        digits[0] = str(random.randint(2, 9))
-
-        # Join into a single string
-        raw_number = "".join(digits)
-
-        # Format as XXXX XXXX XXXX
-        formatted_aadhaar = f"{raw_number[0:4]} {raw_number[4:8]} {raw_number[8:12]}"
-
-        return formatted_aadhaar
+    father_name = f"{random.choice(MALE_FIRST_NAMES)} {last_name}"
+    
+    spouse_first = random.choice(FEMALE_FIRST_NAMES if gender == 'Male' else MALE_FIRST_NAMES)
+    spouse_name = f"{spouse_first} {random.choice(LAST_NAMES)}"
+    
+    occupation = random.choice(OCCUPATIONS_PLANNED if connectivity == "Planed" else OCCUPATIONS_UNPLANNED)
+    address = random.choice(COORDINATED_DISTRICTS if connectivity == "Planed" else DISTRICTS)
 
     return {
-        "Name": full_name,
-        "Age": age,
-        "Gender": gender,
-        "Fathers name" : father_name,
-        "Suppose name" : suppose_name,
-        "Occupation" : occupation,
-        "Address" : address,
-        "Phone number" : generate_phone_number(),
-        "Aadhaar Card" : generate_dummy_aadhaar()
-
+        "person_id": f"PER-{random.randint(10000, 99999)}",
+        "name": full_name,
+        "age": age,
+        "gender": gender,
+        "father_name": father_name,
+        "spouse_name": spouse_name,
+        "occupation": occupation,
+        "address": address,
+        "phone_number": generate_phone_number(),
+        "aadhaar_card": generate_dummy_aadhaar()
     }
 
+# ==========================================
+# MAIN FIR CASE GENERATOR
+# ==========================================
+def generate_fir_case(case_idx=1):
+    """Generates a fully interconnected synthetic case dataset."""
+    district = random.choice(DISTRICTS)
+    
+    # 1. Generate Report Date
+    date_pool = []
+    r1_start, r1_end = datetime.strptime("20-08-26", "%d-%m-%y"), datetime.strptime("30-08-26", "%d-%m-%y")
+    r2_start, r2_end = datetime.strptime("01-09-26", "%d-%m-%y"), datetime.strptime("22-09-26", "%d-%m-%y")
 
-# Generate and print a single random person record
-Informant = generate_person()
-print("Informant Details")
+    curr = r1_start
+    while curr <= r1_end:
+        date_pool.append(curr)
+        curr += timedelta(days=1)
 
-print(f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
-print("-" * 208)
-print(f"{Informant['Name']:<21} | { Informant['Age']:<5} | {Informant['Gender']:<6} | { Informant['Fathers name']:<21} | {Informant['Suppose name']:<21} | { Informant['Occupation']:<21} | {Informant['Phone number']:<12} | { Informant['Address']:<19} | { Informant['Aadhaar Card']:<15}")
+    curr = r2_start
+    while curr <= r2_end:
+        date_pool.append(curr)
+        curr += timedelta(days=1)
 
-Witness = generate_person()
-print("Witness Details")
+    report_dt = random.choice(date_pool)
+    report_date_str = report_dt.strftime("%d-%m-%y")
 
-print(f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
-print("-" * 208)
-print(f"{Witness['Name']:<21} | { Witness['Age']:<5} | {Witness['Gender']:<6} | { Witness['Fathers name']:<21} | {Witness['Suppose name']:<21} | { Witness['Occupation']:<21} | {Witness['Phone number']:<12} | {Witness ['Address']:<19} | { Witness['Aadhaar Card']:<15}")
-print("-" * 208)
-print(f"{'Date of Presence':<21} | {'Time of Presence':<21} | {'Place of Presence':<21} ")
-print("-" * 65)
-print(f"{occurrence_date_str :<15} | {occurrence_time_str :<25} | {Place_of_Occurrence :<25}")
-print("-" * 208)
-Victim = generate_person()
+    # 2. Generate Report Time
+    report_times = []
+    curr_time = datetime.strptime("10:00", "%H:%M")
+    end_time = datetime.strptime("23:59", "%H:%M")
+    while curr_time <= end_time:
+        report_times.append(curr_time.strftime("%H:%M"))
+        curr_time += timedelta(minutes=30)
+    report_time_str = random.choice(report_times)
 
-print("Victim Details")
-print(f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
-print("-" * 208)
-print(f"{Victim['Name']:<21} | {Victim['Age']:<5} | {Victim['Gender']:<6} | { Victim['Fathers name']:<21} | {Victim['Suppose name']:<21} | { Victim['Occupation']:<21} | {Victim['Phone number']:<12} | { Victim['Address']:<19} | {Victim['Aadhaar Card']:<15}")
+    # 3. Case Characteristics
+    case_type = random.choice(CASE_TYPES)
+    connectivity = random.choice(CONNECTIVITY_TYPES)
 
-#Acuused details
-def accused_person():
-    gender = random.choice(['Male', 'Female'])
+    # 4. Occurrence Date Calculation
+    min_n, max_n = N_RANGES[case_type][connectivity]
+    occurrence_date_str = None
 
-    if gender == 'Male':
-        first_name = random.choice(male_planned_first_names)
-    else:
-        first_name = random.choice(female_planned_first_names)
+    valid_date_strs = set([d.strftime("%d-%m-%y") for d in date_pool])
+    for n in range(max_n, min_n - 1, -1):
+        candidate = report_dt - timedelta(days=n)
+        candidate_str = candidate.strftime("%d-%m-%y")
+        if candidate_str in valid_date_strs:
+            occurrence_date_str = candidate_str
+            break
 
-    last_name = random.choice(last_planned_names)
-    full_name = f"{first_name} {last_name}"
-    age = random.randint(22, 78)
-    father_name = f"{random.choice(male_first_names)} {last_name}"
-    if gender == 'Male':
-        suppose_name = f"{random.choice(female_first_names)} {random.choice(last_names)}"
-    else :
-        suppose_name = f"{random.choice(male_first_names)} {random.choice(last_names)}"
-    if selection_Connectivity == "Planed":
-        occupation = random.choice(Occupation_planed)
-    else:
-        occupation = random.choice(Occupation_Unplaned)
-    #Genration of Phone numbers
-    def generate_phone_number():
-        # Generate random area code (200-999)
-        area_code = random.randint(700, 999)
+    if not occurrence_date_str:
+        occurrence_date_str = r1_start.strftime("%d-%m-%y")
 
-        # Generate random 3-digit prefix (200-999)
-        prefix = random.randint(200, 999)
+    # 5. Occurrence Time
+    occ_times = []
+    curr_occ = datetime.strptime("20:00" if connectivity == "Planed" else "10:00", "%H:%M")
+    end_occ = datetime.strptime("23:00" if connectivity == "Planed" else "23:59", "%H:%M")
+    while curr_occ <= end_occ:
+        occ_times.append(curr_occ.strftime("%H:%M"))
+        curr_occ += timedelta(minutes=30)
+    occurrence_time_str = random.choice(occ_times)
 
-        # Generate random 4-digit line number (0000-9999)
-        line_number = random.randint(0, 9999)
+    # 6. Place of Occurrence
+    place_of_occurrence = random.choice(COORDINATED_DISTRICTS if connectivity == "Planed" else DISTRICTS)
 
-        # Format as (XXX) XXX-XXXX
-        phone_number = f"({area_code}) {prefix}-{line_number:04d}"
-        return phone_number
-    if selection_Connectivity == "Planed":
-        address = random.choice(Coordinated_District)
-    else :
-        address = random.choice(District)
-    # Genrating fake Adhaar no
-    def generate_dummy_aadhaar():
-        # Generate 12 random digits
-        digits = [str(random.randint(0, 9)) for _ in range(12)]
+    # 7. Generate Person Entities
+    informant = generate_person("general", connectivity)
+    witness = generate_person("general", connectivity)
+    victim = generate_person("general", connectivity)
+    
+    # 50% probability of known vs unknown accused
+    accused_known = random.choice([True, False])
+    accused = generate_person("accused", connectivity) if accused_known else None
 
-        # Optional: Aadhaar usually doesn't start with 0 or 1, let's make the first digit 2-9 for realism
-        digits[0] = str(random.randint(2, 9))
-
-        # Join into a single string
-        raw_number = "".join(digits)
-
-        # Format as XXXX XXXX XXXX
-        formatted_aadhaar = f"{raw_number[0:4]} {raw_number[4:8]} {raw_number[8:12]}"
-
-        return formatted_aadhaar
-
-    return {
-        "Name": full_name,
-        "Age": age,
-        "Gender": gender,
-        "Fathers name" : father_name,
-        "Suppose name" : suppose_name,
-        "Occupation" : occupation,
-        "Address" : address,
-        "Phone number" : generate_phone_number(),
-        "Aadhaar Card" : generate_dummy_aadhaar()
-
+    # Construct unified JSON payload
+    fir_record = {
+        "case_id": f"FIR-2026-{case_idx:04d}",
+        "district": district,
+        "case_type": case_type,
+        "connectivity": connectivity,
+        "report_details": {
+            "date": report_date_str,
+            "time": report_time_str
+        },
+        "occurrence_details": {
+            "date": occurrence_date_str,
+            "time": occurrence_time_str,
+            "place": place_of_occurrence
+        },
+        "entities": {
+            "informant": informant,
+            "witness": witness,
+            "victim": victim,
+            "accused": accused if accused_known else "UNKNOWN"
+        }
     }
-print("Accused Details")
-Probability=[1, 0]
-if random.choice(Probability) == 1:
-    Acussed = accused_person()
-    print(
-        f"{'Full Name':<21} | {'Age':<5} | {'Gender':<6} | {'Fathers name':<21} | {'Suppose name':<21} | {'Occupation':<21} | {'Phone number':<12} | {'Address':<19} | {'Aadhaar Card':<15}")
-    print("-" * 208)
-    print(
-        f"{Acussed['Name']:<21} | {Acussed['Age']:<5} | {Acussed['Gender']:<6} | { Acussed['Fathers name']:<21} | {Acussed['Suppose name']:<21} | {Acussed['Occupation']:<21} | {Acussed['Phone number']:<12} |  | { Acussed['Address']:<19} | {Acussed['Aadhaar Card']:<15}")
-else :
-    print(
-        f"{'Full Name':<19} | {'Age':<19} | {'Gender':<19} | {'Fathers name':<19} | {'Suppose name':<19} | {'Occupation':<19} | {'Phone number':<19} | {'Address':<19} | {'Aadhaar Card':<19}")
-    print("-" * 208)
-    print(
-        f"{'Unknow':<19} | {'Unknow ':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19} | {'Unknow':<19}")
-    print("-" * 208)
+    return fir_record
+
+def generate_fir_dataset(num_records=5):
+    """Generates a list of FIR case records."""
+    return [generate_fir_case(i + 1) for i in range(num_records)]
+
+
+if __name__ == "__main__":
+    sample_dataset = generate_fir_dataset(num_records=1)
+    print(json.dumps(sample_dataset, indent=2))
